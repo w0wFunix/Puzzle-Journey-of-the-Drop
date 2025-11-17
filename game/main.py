@@ -1,5 +1,6 @@
 import pygame
 import sys
+import random
 
 # Инициализация Pygame
 pygame.init()
@@ -15,6 +16,8 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (200, 200, 200)
 BLUE = (0, 0, 255)
+RED = (255, 0, 0)
+LIGHT_BLUE = (173, 216, 230)
 
 
 class DropletGame:
@@ -33,6 +36,34 @@ class DropletGame:
         # След капли
         self.visited = set()
 
+        # Генерация препятствий
+        self.generate_obstacles()
+
+    def generate_obstacles(self):
+        """Генерация случайных препятствий (20% клеток)"""
+        total_cells = BOARD_SIZE * BOARD_SIZE
+        obstacle_count = max(2, total_cells // 6)  # примерно 20%
+
+        obstacles_placed = 0
+        while obstacles_placed < obstacle_count:
+            row = random.randint(0, BOARD_SIZE - 1)
+            col = random.randint(0, BOARD_SIZE - 1)
+
+            # Проверяем, что клетка свободна
+            if self.board[row][col] == 0:
+                self.board[row][col] = 1
+                obstacles_placed += 1
+
+    def get_cell_from_mouse(self, mouse_pos):
+        """Преобразование координат мыши в координаты клетки"""
+        x, y = mouse_pos
+        col = x // CELL_SIZE
+        row = y // CELL_SIZE
+
+        if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
+            return (row, col)
+        return None
+
     def draw_grid(self):
         """Отрисовка игровой сетки"""
         for x in range(0, WINDOW_SIZE, CELL_SIZE):
@@ -44,8 +75,22 @@ class DropletGame:
         """Отрисовка игрового поля"""
         self.screen.fill(WHITE)
 
+        # Отрисовка препятствий
+        for row in range(BOARD_SIZE):
+            for col in range(BOARD_SIZE):
+                if self.board[row][col] == 1:  # Препятствие
+                    pygame.draw.rect(self.screen, RED,
+                                     (col * CELL_SIZE, row * CELL_SIZE,
+                                      CELL_SIZE, CELL_SIZE))
+
         # Отрисовка сетки
         self.draw_grid()
+
+        # Отрисовка следа капли
+        for row, col in self.visited:
+            pygame.draw.rect(self.screen, LIGHT_BLUE,
+                             (col * CELL_SIZE, row * CELL_SIZE,
+                              CELL_SIZE, CELL_SIZE))
 
         # Отрисовка капли (если выбрана)
         if self.droplet_pos:
@@ -54,6 +99,11 @@ class DropletGame:
                                (col * CELL_SIZE + CELL_SIZE // 2,
                                 row * CELL_SIZE + CELL_SIZE // 2),
                                CELL_SIZE // 3)
+
+        # Отображение инструкций
+        if not self.droplet_pos:
+            instruction = self.font.render("Выберите стартовую позицию", True, BLACK)
+            self.screen.blit(instruction, (10, 10))
 
         pygame.display.flip()
 
@@ -65,6 +115,14 @@ class DropletGame:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     return False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Левая кнопка мыши
+                    if not self.droplet_pos:  # Если капля еще не выбрана
+                        cell = self.get_cell_from_mouse(event.pos)
+                        if cell and self.board[cell[0]][cell[1]] == 0:  # Свободная клетка
+                            self.droplet_pos = cell
+                            self.visited.add(cell)
+
         return True
 
     def run(self):
