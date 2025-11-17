@@ -88,8 +88,9 @@ class DropletGame:
         pygame.display.set_caption("Путешествие капли")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 32)
-        self.small_font = pygame.font.Font(None, 20)
+        self.small_font = pygame.font.Font(None, 25)
         self.bold_font = pygame.font.Font(None, 36)
+        self.win_font =  pygame.font.Font(None, 30)
 
         # Текущий уровень
         self.current_level = 0
@@ -200,32 +201,56 @@ class DropletGame:
             self.is_animating = True
             self.animation_path = path
             self.current_animation_index = 0
+
+            # Определяем клетки для закрашивания (все кроме стартовой)
+            self.cells_to_fill = set(path[1:])
+            self.filling_cells = {cell: 0 for cell in self.cells_to_fill}
+
             self.moves += 1
 
     def update_animation(self):
-        """Обновление анимации"""
+        """Обновление анимации движения и закрашивания"""
         if not self.is_animating:
             return False
 
         self.current_animation_index += 1
         total_frames = len(self.animation_path) * self.animation_speed
 
+        # Обновляем прогресс закрашивания для всех клеток пути
+        total_progress = self.current_animation_index / total_frames
+
+        for cell in self.cells_to_fill:
+            # Клетка начинает закрашиваться, когда капля ее достигает
+            cell_index = self.animation_path.index(cell)
+            cell_start_progress = cell_index / len(self.animation_path)
+            if total_progress >= cell_start_progress:
+                cell_progress = (total_progress - cell_start_progress) * 2.0
+                self.filling_cells[cell] = min(1.0, cell_progress)
+
         if self.current_animation_index >= total_frames:
+            # Анимация завершена
             self.is_animating = False
             final_pos = self.animation_path[-1]
             self.droplet_pos = final_pos
+
+            # Добавляем все клетки пути в посещенные
             for cell in self.animation_path:
                 self.visited.add(cell)
+
+            self.cells_to_fill.clear()
+            self.filling_cells.clear()
             return False
 
+        # Обновляем позицию капли
         progress = self.current_animation_index / total_frames
-        path_index = int(progress * (len(self.animation_path) - 1))
+        path_index = min(int(progress * len(self.animation_path)), len(self.animation_path) - 1)
         self.droplet_pos = self.animation_path[path_index]
+
         return True
 
     def move_droplet(self, direction):
         """Запуск движения капли в заданном направлении"""
-        if not self.droplet_pos or self.is_animating:
+        if not self.droplet_pos or self.is_animating or self.game_over:
             return False
 
         path = self.calculate_movement_path(direction)
@@ -256,7 +281,7 @@ class DropletGame:
         else:
             # Счетчик ходов
             moves_text = self.small_font.render(f"Ходы: {self.moves}", True, BLACK)
-            self.screen.blit(moves_text, (20, 15))
+            self.screen.blit(moves_text, (10, 10))
 
             # Прогресс
             free_cells = sum(1 for row in range(BOARD_SIZE) for col in range(BOARD_SIZE)
@@ -264,19 +289,19 @@ class DropletGame:
             visited_count = len(self.visited)
             progress = f"Прогресс: {visited_count}/{free_cells}"
             progress_text = self.small_font.render(progress, True, BLACK)
-            self.screen.blit(progress_text, (120, 15))
+            self.screen.blit(progress_text, (180, 10))
 
             # Уровень
             level_text = self.small_font.render(f"Уровень: {self.current_level + 1}/{self.total_levels}", True, BLACK)
-            self.screen.blit(level_text, (WINDOW_WIDTH - 120, 15))
+            self.screen.blit(level_text, (WINDOW_WIDTH - 120, 10))
 
             # Индикаторы
             if self.game_over:
                 game_over_text = self.small_font.render("ТУПИК! Нажмите R для перезапуска", True, RED)
-                self.screen.blit(game_over_text, (WINDOW_WIDTH // 2 - 140, 30))
+                self.screen.blit(game_over_text, (WINDOW_WIDTH // 2 - 155, 30))
             elif visited_count == free_cells:
                 complete_text = self.small_font.render("ВСЕ КЛЕТКИ ПОСЕЩЕНЫ!", True, GREEN)
-                self.screen.blit(complete_text, (WINDOW_WIDTH // 2 - 80, 30))
+                self.screen.blit(complete_text, (WINDOW_WIDTH // 2 - 110, 30))
             elif self.is_animating:
                 moving_text = self.small_font.render("Движение...", True, BLUE)
                 self.screen.blit(moving_text, (WINDOW_WIDTH // 2 - 40, 30))
@@ -329,6 +354,30 @@ class DropletGame:
                                  (col * CELL_SIZE + 2 + offset,
                                   row * CELL_SIZE + INFO_HEIGHT + 2 + offset,
                                   size, size))
+        for (row, col), progress in self.filling_cells.items():
+            if progress < 1.0:
+                # Анимация закрашивания - от центра к краям с эффектом волны
+                wave = math.sin(pygame.time.get_ticks() * 0.01) * 0.1 + 1.0
+                base_size = int((CELL_SIZE - 4) * progress)
+                animated_size = int(base_size * wave)
+                offset = (CELL_SIZE - 4 - animated_size) // 2
+
+                # Плавное изменение цвета от белого к голубому
+                r = int(LIGHT_BLUE[0] * progress)
+                g = int(LIGHT_BLUE[1] * progress)
+                c = int(LIGHT_BLUE[2] * progress)
+                color = (r, g, c)
+
+                pygame.draw.rect(self.screen, color,
+                                 (col * CELL_SIZE + 2 + offset,
+                                  row * CELL_SIZE + INFO_HEIGHT + 2 + offset,
+                                  animated_size, animated_size))
+            else:
+                # Полностью закрашенная клетка
+                pygame.draw.rect(self.screen, LIGHT_BLUE,
+                                 (col * CELL_SIZE + 2,
+                                  row * CELL_SIZE + INFO_HEIGHT + 2,
+                                  CELL_SIZE - 4, CELL_SIZE - 4))
 
         # Отрисовка сетки
         for x in range(0, WINDOW_WIDTH, CELL_SIZE):
@@ -367,18 +416,30 @@ class DropletGame:
             alpha = (math.sin(pygame.time.get_ticks() * 0.01) + 1) * 127 + 128
             win_color = (int(GREEN[0]), int(GREEN[1]), int(GREEN[2]))
 
-            win_text = self.bold_font.render("ПОБЕДА! Нажмите ПРОБЕЛ для следующего уровня", True, win_color)
-            text_rect = win_text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+            # Разделяем текст на две строки
+            win_text1 = self.win_font.render("ПОБЕДА!", True, win_color)
+            win_text2 = self.win_font.render("Нажмите ПРОБЕЛ для следующего уровня", True, win_color)
 
-            # Фон надписи
+            # Вычисляем общий размер для фона
+            text_width = max(win_text1.get_width(), win_text2.get_width()) + 40
+            text_height = win_text1.get_height() + win_text2.get_height() + 30
+
+            # Создаем общий прямоугольник для фона
+            background_rect = pygame.Rect(0, 0, text_width, text_height)
+            background_rect.center = (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
+
+            # Фон надписи (общая рамка)
             pygame.draw.rect(self.screen, (255, 255, 255, 200),
-                             text_rect.inflate(30, 20),
-                             border_radius=15)
+                             background_rect, border_radius=15)
             pygame.draw.rect(self.screen, win_color,
-                             text_rect.inflate(30, 20),
-                             3, border_radius=15)
+                             background_rect, 3, border_radius=15)
 
-            self.screen.blit(win_text, text_rect)
+            # Располагаем текст внутри фона
+            text1_rect = win_text1.get_rect(center=(WINDOW_WIDTH // 2, background_rect.top + 25))
+            text2_rect = win_text2.get_rect(center=(WINDOW_WIDTH // 2, background_rect.top + 47))
+
+            self.screen.blit(win_text1, text1_rect)
+            self.screen.blit(win_text2, text2_rect)
 
             # Эффект хлопушек
             if self.win_animation_time % 10 == 0:
