@@ -2,13 +2,14 @@ import pygame
 import sys
 import math
 import random
+
 # Инициализация Pygame
 pygame.init()
 
 # Константы
 BOARD_SIZE = 5
 CELL_SIZE = 100
-INFO_HEIGHT = 50
+INFO_HEIGHT = 80
 WINDOW_WIDTH = BOARD_SIZE * CELL_SIZE
 WINDOW_HEIGHT = BOARD_SIZE * CELL_SIZE + INFO_HEIGHT
 FPS = 60
@@ -28,6 +29,13 @@ DARK_GREEN = (30, 130, 45)
 GOLD = (255, 215, 0)
 ORANGE = (255, 140, 0)
 DARK_ORANGE = (200, 100, 0)
+PURPLE = (128, 0, 128)
+LIGHT_PURPLE = (200, 160, 255)
+
+# Состояния игры
+STATE_MENU = 0
+STATE_PLAYING = 1
+STATE_LEVEL_SELECT = 2
 
 # Предопределенные уровни
 LEVELS = [
@@ -90,7 +98,11 @@ class DropletGame:
         self.font = pygame.font.Font(None, 32)
         self.small_font = pygame.font.Font(None, 25)
         self.bold_font = pygame.font.Font(None, 36)
-        self.win_font =  pygame.font.Font(None, 30)
+        self.win_font = pygame.font.Font(None, 30)
+        self.title_font = pygame.font.Font(None, 48)
+
+        # Состояние игры
+        self.game_state = STATE_MENU
 
         # Текущий уровень
         self.current_level = 0
@@ -138,7 +150,7 @@ class DropletGame:
         free_cells = sum(1 for row in range(BOARD_SIZE) for col in range(BOARD_SIZE)
                          if self.board[row][col] == 0)
 
-        # Если не все клетки посещены, но двигаться некуда
+        # Если не все клетки посещены, и двигаться некуда
         if len(self.visited) < free_cells:
             row, col = self.droplet_pos
 
@@ -266,7 +278,7 @@ class DropletGame:
         return len(self.visited) == free_cells
 
     def draw_info_panel(self):
-        """Отрисовка информационной панели"""
+        """Отрисовка верхней панели"""
         # Фон панели с градиентом
         for i in range(INFO_HEIGHT):
             color_value = 200 + (i * 55 // INFO_HEIGHT)
@@ -297,21 +309,21 @@ class DropletGame:
 
             # Индикаторы
             if self.game_over:
-                game_over_text = self.small_font.render("ТУПИК! Нажмите R для перезапуска", True, RED)
-                self.screen.blit(game_over_text, (WINDOW_WIDTH // 2 - 155, 30))
+                game_over_text = self.small_font.render("Нажмите R для перезапуска", True, RED)
+                self.screen.blit(game_over_text, (WINDOW_WIDTH // 2 - 120, 30))
             elif visited_count == free_cells:
                 complete_text = self.small_font.render("ВСЕ КЛЕТКИ ПОСЕЩЕНЫ!", True, GREEN)
-                self.screen.blit(complete_text, (WINDOW_WIDTH // 2 - 110, 30))
+                self.screen.blit(complete_text, (WINDOW_WIDTH // 2 - 110, 40))
             elif self.is_animating:
                 moving_text = self.small_font.render("Движение...", True, BLUE)
-                self.screen.blit(moving_text, (WINDOW_WIDTH // 2 - 40, 30))
+                self.screen.blit(moving_text, (WINDOW_WIDTH // 2 - 50, 30))
 
     def draw_board(self):
         """Отрисовка игрового поля"""
         # Фон поля
         self.screen.fill(LIGHT_GRAY)
 
-        # Отрисовка информационной панели
+        # Отрисовка верхней панели
         self.draw_info_panel()
 
         # Отрисовка препятствий с тенью
@@ -334,7 +346,7 @@ class DropletGame:
                                       row * CELL_SIZE + INFO_HEIGHT + 10,
                                       CELL_SIZE - 20, CELL_SIZE - 20), 2)
 
-        # Отрисовка следа капли с анимацией
+        # Рендер следа капли с анимацией
         for i, (row, col) in enumerate(self.visited):
             # Плавное изменение цвета следа
             alpha = min(200, 100 + (i % 5) * 20)
@@ -345,7 +357,7 @@ class DropletGame:
                               row * CELL_SIZE + INFO_HEIGHT + 2,
                               CELL_SIZE - 4, CELL_SIZE - 4))
 
-            # Эффект волны при победе
+            # Эффект волн при победе
             if self.check_win() and not self.is_animating:
                 wave = math.sin(pygame.time.get_ticks() * 0.01 + i * 0.5) * 0.3 + 0.7
                 size = int((CELL_SIZE - 4) * wave)
@@ -356,7 +368,7 @@ class DropletGame:
                                   size, size))
         for (row, col), progress in self.filling_cells.items():
             if progress < 1.0:
-                # Анимация закрашивания - от центра к краям с эффектом волны
+                # Анимация закрашивания (клетки заполняются градиентом)
                 wave = math.sin(pygame.time.get_ticks() * 0.01) * 0.1 + 1.0
                 base_size = int((CELL_SIZE - 4) * progress)
                 animated_size = int(base_size * wave)
@@ -474,39 +486,229 @@ class DropletGame:
 
             self.screen.blit(game_over_text, text_rect)
 
+        # Кнопка возврата в меню активная
+        if self.game_state == STATE_PLAYING:
+            back_button = pygame.Rect(WINDOW_WIDTH - 110, INFO_HEIGHT - 40, 100, 30)
+            pygame.draw.rect(self.screen, PURPLE, back_button, border_radius=10)
+            pygame.draw.rect(self.screen, DARK_BLUE, back_button, 2, border_radius=10)
+            back_text = self.small_font.render("В меню", True, WHITE)
+            self.screen.blit(back_text, (back_button.centerx - back_text.get_width() // 2,
+                                        back_button.centery - back_text.get_height() // 2))
+
         pygame.display.flip()
 
+    def draw_menu(self):
+        """Отрисовка главного меню"""
+        # Фон с градиентом
+        for y in range(WINDOW_HEIGHT):
+            color_value = 150 + (y * 105 // WINDOW_HEIGHT)
+            pygame.draw.line(self.screen, (color_value, color_value, 255),
+                             (0, y), (WINDOW_WIDTH, y))
+
+        # Заголовок
+        title_text = self.title_font.render("ПУТЕШЕСТВИЕ КАПЛИ", True, DARK_BLUE)
+        self.screen.blit(title_text, (WINDOW_WIDTH // 2 - title_text.get_width() // 2, 50))
+
+        # Кнопки
+        button_width, button_height = 200, 50
+        button_x = WINDOW_WIDTH // 2 - button_width // 2
+
+        # Кнопка "Продолжить"
+        continue_button = pygame.Rect(button_x, 150, button_width, button_height)
+        pygame.draw.rect(self.screen, BLUE, continue_button, border_radius=15)
+        pygame.draw.rect(self.screen, DARK_BLUE, continue_button, 3, border_radius=15)
+        continue_text = self.font.render("Продолжить", True, WHITE)
+        self.screen.blit(continue_text, (continue_button.centerx - continue_text.get_width() // 2,
+                                         continue_button.centery - continue_text.get_height() // 2))
+
+        # Кнопка "Выбор уровня"
+        level_select_button = pygame.Rect(button_x, 220, button_width, button_height)
+        pygame.draw.rect(self.screen, GREEN, level_select_button, border_radius=15)
+        pygame.draw.rect(self.screen, DARK_GREEN, level_select_button, 3, border_radius=15)
+        level_select_text = self.font.render("Выбор уровня", True, WHITE)
+        self.screen.blit(level_select_text, (level_select_button.centerx - level_select_text.get_width() // 2,
+                                             level_select_button.centery - level_select_text.get_height() // 2))
+
+        # Кнопка "Выход"
+        exit_button = pygame.Rect(button_x, 290, button_width, button_height)
+        pygame.draw.rect(self.screen, RED, exit_button, border_radius=15)
+        pygame.draw.rect(self.screen, DARK_RED, exit_button, 3, border_radius=15)
+        exit_text = self.font.render("Выход", True, WHITE)
+        self.screen.blit(exit_text, (exit_button.centerx - exit_text.get_width() // 2,
+                                     exit_button.centery - exit_text.get_height() // 2))
+
+        # Информация об управлении
+        controls_text1 = self.small_font.render("Управление:",True, BLACK)
+        controls_text2 = self.small_font.render("Стрелки - для движения",True, BLACK)
+        controls_text3 = self.small_font.render("R - для перезапуска",True, BLACK)
+        controls_text4 = self.small_font.render("ESC - для выхода",True, BLACK)
+        self.screen.blit(controls_text1, (WINDOW_WIDTH // 2 - controls_text1.get_width() // 2, 370))
+        self.screen.blit(controls_text2, (WINDOW_WIDTH // 2 - controls_text2.get_width() // 2, 390))
+        self.screen.blit(controls_text3, (WINDOW_WIDTH // 2 - controls_text3.get_width() // 2, 410))
+        self.screen.blit(controls_text4, (WINDOW_WIDTH // 2 - controls_text4.get_width() // 2, 430))
+        pygame.display.flip()
+
+    def draw_level_select(self):
+        """Отрисовка меню выбора уровня"""
+        # Фон с градиентом
+        for y in range(WINDOW_HEIGHT):
+            color_value = 150 + (y * 105 // WINDOW_HEIGHT)
+            pygame.draw.line(self.screen, (color_value, 255, color_value),
+                             (0, y), (WINDOW_WIDTH, y))
+
+        # Заголовок
+        title_text = self.title_font.render("ВЫБОР УРОВНЯ", True, DARK_GREEN)
+        self.screen.blit(title_text, (WINDOW_WIDTH // 2 - title_text.get_width() // 2, 30))
+
+        # Кнопка возврата в меню
+        back_button = pygame.Rect(WINDOW_WIDTH//2 - 51, 300, 100, 30)
+        pygame.draw.rect(self.screen, PURPLE, back_button, border_radius=10)
+        pygame.draw.rect(self.screen, DARK_BLUE, back_button, 2, border_radius=10)
+        back_text = self.small_font.render("Назад", True, WHITE)
+        self.screen.blit(back_text, (back_button.centerx - back_text.get_width() // 2,
+                                     back_button.centery - back_text.get_height() // 2))
+
+        # Кнопки уровней сетка
+        levels_per_row = 3
+        level_button_size = 80
+        level_button_margin = 20
+        start_x = (WINDOW_WIDTH - (
+                    levels_per_row * level_button_size + (levels_per_row - 1) * level_button_margin)) // 2
+        start_y = 100
+
+        for i in range(self.total_levels):
+            row = i // levels_per_row
+            col = i % levels_per_row
+
+            level_button = pygame.Rect(
+                start_x + col * (level_button_size + level_button_margin),
+                start_y + row * (level_button_size + level_button_margin),
+                level_button_size, level_button_size
+            )
+
+            # Разные цвета для разных уровней
+            colors = [BLUE, GREEN, ORANGE, PURPLE, RED, GOLD]
+            color = colors[i % len(colors)]
+            dark_color = (max(0, color[0] - 40), max(0, color[1] - 40), max(0, color[2] - 40))
+
+            pygame.draw.rect(self.screen, color, level_button, border_radius=15)
+            pygame.draw.rect(self.screen, dark_color, level_button, 3, border_radius=15)
+
+            level_text = self.font.render(str(i + 1), True, WHITE)
+            self.screen.blit(level_text, (level_button.centerx - level_text.get_width() // 2,
+                                          level_button.centery - level_text.get_height() // 2))
+
+        pygame.display.flip()
+
+    def handle_menu_events(self, event):
+        """Обработка событий в меню"""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            x, y = event.pos
+
+            # Координаты кнопок
+            button_width, button_height = 200, 50
+            button_x = WINDOW_WIDTH // 2 - button_width // 2
+
+            # Проверка нажатия на кнопки
+            if button_x <= x <= button_x + button_width:
+                if 150 <= y <= 150 + button_height:  # Продолжить
+                    self.game_state = STATE_PLAYING
+                elif 220 <= y <= 220 + button_height:  # Выбор уровня
+                    self.game_state = STATE_LEVEL_SELECT
+                elif 290 <= y <= 290 + button_height:  # Выход
+                    return False
+
+        return True
+
+    def handle_level_select_events(self, event):
+        """Обработка ивентов в меню выбора уровня"""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            x, y = event.pos
+
+            # Проверка кнопки "Назад"
+            back_button_x = WINDOW_WIDTH // 2 - 51
+            back_button_y = 300
+            if (back_button_x <= x <= back_button_x + 100 and
+                    back_button_y <= y <= back_button_y + 30):
+                self.game_state = STATE_MENU
+                return True
+
+            # Проверка выбора уровня
+            levels_per_row = 3
+            level_button_size = 80
+            level_button_margin = 20
+            start_x = (WINDOW_WIDTH - (
+                        levels_per_row * level_button_size + (levels_per_row - 1) * level_button_margin)) // 2
+            start_y = 100
+
+            for i in range(self.total_levels):
+                row = i // levels_per_row
+                col = i % levels_per_row
+
+                button_x = start_x + col * (level_button_size + level_button_margin)
+                button_y = start_y + row * (level_button_size + level_button_margin)
+
+                if button_x <= x <= button_x + level_button_size and button_y <= y <= button_y + level_button_size:
+                    self.load_level(i)
+                    self.game_state = STATE_PLAYING
+                    break
+
+        return True
+
+    def handle_playing_events(self, event):
+        """Обработка событий во время игры"""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Проверка кнопки "В меню" (активна)
+        
+            if (WINDOW_WIDTH - 110 <= event.pos[0] <= WINDOW_WIDTH - 10 and
+                INFO_HEIGHT - 40 <= event.pos[1] <= INFO_HEIGHT - 10):
+                self.game_state = STATE_MENU
+                return True
+
+            # Обработка клика по клетке если игра активна
+            if not self.droplet_pos and not self.is_animating and not self.game_over and not self.check_win():
+                cell = self.get_cell_from_mouse(event.pos)
+                if cell and self.board[cell[0]][cell[1]] == 0:
+                    self.droplet_pos = cell
+                    self.visited.add(cell)
+
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.game_state = STATE_MENU
+            elif event.key == pygame.K_r:  # Перезапуск уровня
+                self.load_level(self.current_level)
+            elif event.key == pygame.K_SPACE and self.check_win() and not self.is_animating:
+                self.load_level(self.current_level + 1)
+            elif self.droplet_pos and not self.check_win() and not self.is_animating and not self.game_over:
+                if event.key == pygame.K_UP:
+                    self.move_droplet((-1, 0))
+                elif event.key == pygame.K_DOWN:
+                    self.move_droplet((1, 0))
+                elif event.key == pygame.K_LEFT:
+                    self.move_droplet((0, -1))
+                elif event.key == pygame.K_RIGHT:
+                    self.move_droplet((0, 1))
+
+        return True
 
     def handle_events(self):
         """Обработка событий"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+
+            if self.game_state == STATE_MENU:
+                if not self.handle_menu_events(event):
                     return False
-                elif event.key == pygame.K_r:  # Перезапуск уровня
-                    self.load_level(self.current_level)
-                elif event.key == pygame.K_SPACE and self.check_win() and not self.is_animating:
-                    self.load_level(self.current_level + 1)
-                elif self.droplet_pos and not self.check_win() and not self.is_animating and not self.game_over:
-                    if event.key == pygame.K_UP:
-                        self.move_droplet((-1, 0))
-                    elif event.key == pygame.K_DOWN:
-                        self.move_droplet((1, 0))
-                    elif event.key == pygame.K_LEFT:
-                        self.move_droplet((0, -1))
-                    elif event.key == pygame.K_RIGHT:
-                        self.move_droplet((0, 1))
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1 and not self.droplet_pos and not self.is_animating and not self.game_over:
-                    cell = self.get_cell_from_mouse(event.pos)
-                    if cell and self.board[cell[0]][cell[1]] == 0:
-                        self.droplet_pos = cell
-                        self.visited.add(cell)
+            elif self.game_state == STATE_LEVEL_SELECT:
+                if not self.handle_level_select_events(event):
+                    return False
+            elif self.game_state == STATE_PLAYING:
+                if not self.handle_playing_events(event):
+                    return False
 
         # Проверка на поражение после обработки событий
-        if not self.game_over and not self.is_animating and self.droplet_pos and not self.check_win():
+        if self.game_state == STATE_PLAYING and not self.game_over and not self.is_animating and self.droplet_pos and not self.check_win():
             self.game_over = self.check_game_over()
             if self.game_over:
                 self.game_over_time = 0
@@ -518,8 +720,15 @@ class DropletGame:
         running = True
         while running:
             running = self.handle_events()
-            self.update_animation()
-            self.draw_board()
+
+            if self.game_state == STATE_PLAYING:
+                self.update_animation()
+                self.draw_board()
+            elif self.game_state == STATE_MENU:
+                self.draw_menu()
+            elif self.game_state == STATE_LEVEL_SELECT:
+                self.draw_level_select()
+
             self.clock.tick(FPS)
 
         pygame.quit()
