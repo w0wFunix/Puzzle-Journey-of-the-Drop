@@ -161,7 +161,10 @@ class DropletGame:
             for dr, dc in directions:
                 new_row, new_col = row + dr, col + dc
 
-                if (BOARD_SIZE > new_row >= 0 == self.board[new_row][new_col] and 0 <= new_col < BOARD_SIZE and
+                # Правильная проверка границ и условий
+                if (0 <= new_row < BOARD_SIZE and
+                        0 <= new_col < BOARD_SIZE and
+                        self.board[new_row][new_col] == 0 and
                         (new_row, new_col) not in self.visited):
                     can_move = True
                     break
@@ -659,7 +662,7 @@ class DropletGame:
         """Обработка событий во время игры"""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # Проверка кнопки "В меню" (активна)
-        
+
             if (WINDOW_WIDTH - 110 <= event.pos[0] <= WINDOW_WIDTH - 10 and
                 INFO_HEIGHT - 40 <= event.pos[1] <= INFO_HEIGHT - 10):
                 self.game_state = STATE_MENU
